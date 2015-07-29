@@ -5,7 +5,7 @@ esxi_datastore: YOUR_ESXI_DATASTORE
 
 iso_path: MirantisOpenStack-6.0.iso
 
-ROUTER
+router_host: suplab01-router
 
 routed_networks:
   pxe:
