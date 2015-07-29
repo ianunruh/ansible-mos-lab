@@ -1,0 +1,48 @@
+- hosts: router
+  tasks:
+    - name: generate config script
+      template:
+        src: templates/ensure-vif-absent.sh.j2
+        dest: /tmp/script.sh
+        mode: 0755
+      when: ansible_hostname == router_host
+
+    - name: run config script
+      command: /tmp/script.sh
+      when: ansible_hostname == router_host
+
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: destroy fuel master vm
+      vsphere_vm:
+        name: "{{ env_name }}-fuel-master"
+        state: absent
+
+        login_host: "{{ vsphere_login_host }}"
+        login_user: "{{ vsphere_login_user }}"
+        login_password: "{{ vsphere_login_password }}"
+        login_insecure: "{{ vsphere_login_insecure }}"
+
+    - name: destroy fuel slave vms
+      vsphere_vm:
+        name: "{{ env_name }}-fuel-slave-{{ item }}"
+        state: absent
+
+        login_host: "{{ vsphere_login_host }}"
+        login_user: "{{ vsphere_login_user }}"
+        login_password: "{{ vsphere_login_password }}"
+        login_insecure: "{{ vsphere_login_insecure }}"
+      with_sequence: count={{ fuel_slave_count }}
+
+    - name: remove port groups
+      vsphere_port_group:
+        name: "{{ env_name }}-{{ item.key }}"
+        host: "{{ esxi_host }}"
+        state: absent
+
+        login_host: "{{ vsphere_login_host }}"
+        login_user: "{{ vsphere_login_user }}"
+        login_password: "{{ vsphere_login_password }}"
+        login_insecure: "{{ vsphere_login_insecure }}"
+      with_dict: flat_networks

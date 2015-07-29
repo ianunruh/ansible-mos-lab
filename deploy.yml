@@ -1,0 +1,73 @@
+- hosts: router
+  tasks:
+    - name: generate config script
+      template:
+        src: templates/ensure-vif-present.sh.j2
+        dest: /tmp/script.sh
+        mode: 0755
+      when: ansible_hostname == router_host
+
+    - name: run config script
+      command: /tmp/script.sh
+      when: ansible_hostname == router_host
+
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: create port groups
+      vsphere_port_group:
+        name: "{{ env_name }}-{{ item.key }}"
+        host: "{{ esxi_host }}"
+        vswitch: "{{ item.value.vswitch }}"
+        vlan_id: "{{ item.value.vif }}"
+        state: present
+
+        login_host: "{{ vsphere_login_host }}"
+        login_user: "{{ vsphere_login_user }}"
+        login_password: "{{ vsphere_login_password }}"
+        login_insecure: "{{ vsphere_login_insecure }}"
+      with_dict: flat_networks
+
+    - name: create fuel master vm
+      vsphere_vm:
+        name: "{{ env_name }}-fuel-master"
+        host: "{{ esxi_host }}"
+        datastore: "{{ esxi_datastore }}"
+        cores: 4
+        memory: 4096
+        disks:
+          - capacity: 100
+        nics:
+          - network: "{{ env_name }}-pxe"
+        cdroms:
+          - iso_path: "[{{ esxi_datastore }}] {{ iso_path }}"
+        state: present
+
+        login_host: "{{ vsphere_login_host }}"
+        login_user: "{{ vsphere_login_user }}"
+        login_password: "{{ vsphere_login_password }}"
+        login_insecure: "{{ vsphere_login_insecure }}"
+
+    - name: create fuel slave vms
+      vsphere_vm:
+        name: "{{ env_name }}-fuel-slave-{{ item }}"
+        host: "{{ esxi_host }}"
+        datastore: "{{ esxi_datastore }}"
+        cores: 4
+        memory: 4096
+        disks:
+          - capacity: 100
+          - capacity: 100
+          - capacity: 100
+        nics:
+          - network: "{{ env_name }}-pxe"
+          - network: Trunk
+          - network: Trunk
+          - network: Trunk
+        state: present
+
+        login_host: "{{ vsphere_login_host }}"
+        login_user: "{{ vsphere_login_user }}"
+        login_password: "{{ vsphere_login_password }}"
+        login_insecure: "{{ vsphere_login_insecure }}"
+      with_sequence: count={{ fuel_slave_count }}

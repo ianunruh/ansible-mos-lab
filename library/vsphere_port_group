@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+import ssl
+
+from pyVmomi import vim, vmodl
+from pyVim import connect
+
+def get_obj(content, vimtype, name):
+    obj = None
+    container = content.viewManager.CreateContainerView(content.rootFolder, vimtype, True)
+    for c in container.view:
+        if c.name == name:
+            obj = c
+            break
+    return obj
+
+def main():
+    module = AnsibleModule(
+        argument_spec=dict(
+            name=dict(required=True),
+            vlan_id=dict(type='int', default=0),
+            vswitch=dict(),
+            host=dict(required=True),
+            state=dict(choices=['present', 'absent'], default='present'),
+            login_host=dict(required=True),
+            login_user=dict(required=True),
+            login_password=dict(required=True),
+            login_insecure=dict(type='bool', default=False),
+        )
+    )
+
+    name = module.params['name']
+    vlan_id = module.params['vlan_id']
+    vswitch = module.params['vswitch']
+    host = module.params['host']
+    state = module.params['state']
+    login_host = module.params['login_host']
+    login_user = module.params['login_user']
+    login_password = module.params['login_password']
+    login_insecure = module.params['login_insecure']
+
+    if login_insecure:
+        ssl._create_default_https_context = ssl._create_unverified_context
+
+    si = connect.SmartConnect(host=login_host, user=login_user, pwd=login_password)
+
+    content = si.RetrieveContent()
+
+    host = get_obj(content, [vim.HostSystem], host)
+    host_network_system = host.configManager.networkSystem
+
+    host_network_info = host_network_system.networkInfo
+
+    portgroup = None
+    for pg in host_network_info.portgroup:
+        if pg.spec.name == name:
+            portgroup = pg
+            break
+
+    changed = False
+
+    if state == 'present':
+        if portgroup:
+            if portgroup.spec.vswitchName != vswitch:
+                module.fail_json(msg='Port group exists but not on expected vSwitch')
+        else:
+            host_network_system.AddPortGroup(vim.host.PortGroup.Specification(
+                name=name,
+                vlanId=vlan_id,
+                vswitchName=vswitch,
+                policy=vim.host.NetworkPolicy(
+                    security=vim.host.NetworkPolicy.SecurityPolicy(
+                        allowPromiscuous=True,
+                        forgedTransmits=True,
+                        macChanges=True,
+                    )
+                )
+            ))
+
+            changed = True
+    elif portgroup:
+        host_network_system.RemovePortGroup(name)
+        changed = True
+
+    module.exit_json(changed=changed)
+
+from ansible.module_utils.basic import *
+main()

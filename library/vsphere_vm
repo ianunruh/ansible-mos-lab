@@ -1,0 +1,220 @@
+#!/usr/bin/env python
+import ssl
+
+from pyVmomi import vim, vmodl
+from pyVim import connect
+
+def get_obj(content, vimtype, name):
+    obj = None
+    container = content.viewManager.CreateContainerView(content.rootFolder, vimtype, True)
+    for c in container.view:
+        if c.name == name:
+            obj = c
+            break
+    return obj
+
+def wait_for_tasks(service_instance, tasks):
+    property_collector = service_instance.content.propertyCollector
+    task_list = [str(task) for task in tasks]
+    # Create filter
+    obj_specs = [vmodl.query.PropertyCollector.ObjectSpec(obj=task)
+                 for task in tasks]
+    property_spec = vmodl.query.PropertyCollector.PropertySpec(type=vim.Task,
+                                                               pathSet=[],
+                                                               all=True)
+    filter_spec = vmodl.query.PropertyCollector.FilterSpec()
+    filter_spec.objectSet = obj_specs
+    filter_spec.propSet = [property_spec]
+    pcfilter = property_collector.CreateFilter(filter_spec, True)
+    try:
+        version, state = None, None
+        # Loop looking for updates till the state moves to a completed state.
+        while len(task_list):
+            update = property_collector.WaitForUpdates(version)
+            for filter_set in update.filterSet:
+                for obj_set in filter_set.objectSet:
+                    task = obj_set.obj
+                    for change in obj_set.changeSet:
+                        if change.name == 'info':
+                            state = change.val.state
+                        elif change.name == 'info.state':
+                            state = change.val
+                        else:
+                            continue
+
+                        if not str(task) in task_list:
+                            continue
+
+                        if state == vim.TaskInfo.State.success:
+                            # Remove task from taskList
+                            task_list.remove(str(task))
+                        elif state == vim.TaskInfo.State.error:
+                            raise task.info.error
+            # Move to next version
+            version = update.version
+    finally:
+        if pcfilter:
+            pcfilter.Destroy()
+
+def main():
+    module = AnsibleModule(
+        argument_spec=dict(
+            name=dict(required=True),
+            datastore=dict(default='datastore1'),
+            host=dict(),
+
+            cores=dict(type='int', default=1),
+            cores_per_socket=dict(type='int'),
+            memory=dict(type='int', default=128),
+            guest_type=dict(default='rhel6_64Guest'),
+
+            disks=dict(type='list'),
+            nics=dict(type='list'),
+            cdroms=dict(type='list'),
+
+            state=dict(choices=['present', 'absent'], default='present'),
+
+            login_host=dict(required=True),
+            login_user=dict(required=True),
+            login_password=dict(required=True),
+            login_insecure=dict(type='bool', default=False),
+        )
+    )
+
+    name = module.params['name']
+    datastore_name = module.params['datastore']
+    host_name = module.params['host']
+
+    cores = module.params['cores']
+    cores_per_socket = module.params['cores_per_socket'] or cores
+    memory = module.params['memory']
+    guest_type = module.params['guest_type']
+
+    disks = module.params['disks'] or []
+    nics = module.params['nics'] or []
+    cdroms = module.params['cdroms'] or []
+
+    state = module.params['state']
+
+    login_host = module.params['login_host']
+    login_user = module.params['login_user']
+    login_password = module.params['login_password']
+    login_insecure = module.params['login_insecure']
+
+    if login_insecure:
+        ssl._create_default_https_context = ssl._create_unverified_context
+
+    si = connect.SmartConnect(host=login_host, user=login_user, pwd=login_password)
+
+    content = si.RetrieveContent()
+
+    changed = False
+
+    vm = get_obj(content, [vim.VirtualMachine], name)
+
+    if state == 'present':
+        if vm:
+            pass
+        else:
+            datastore_path = '[{}] {}'.format(datastore_name, name)
+            compute_resource = get_obj(content, [vim.ComputeResource], host_name)
+            resource_pool = compute_resource.resourcePool
+            datacenter = content.rootFolder.childEntity[0]
+            vm_folder = datacenter.vmFolder
+
+            device_changes = [
+                vim.vm.device.VirtualDeviceSpec(
+                    operation=vim.vm.device.VirtualDeviceSpec.Operation.add,
+                    device=vim.vm.device.VirtualLsiLogicController(
+                        sharedBus=vim.vm.device.VirtualSCSIController.Sharing.noSharing,
+                        key=0,
+                    ),
+                ),
+
+                vim.vm.device.VirtualDeviceSpec(
+                    operation=vim.vm.device.VirtualDeviceSpec.Operation.add,
+                    device=vim.vm.device.VirtualAHCIController(
+                        key=1,
+                    ),
+                ),
+            ]
+
+            for nic in nics:
+                network = get_obj(content, [vim.Network], nic['network'])
+
+                device_changes.append(vim.vm.device.VirtualDeviceSpec(
+                    operation=vim.vm.device.VirtualDeviceSpec.Operation.add,
+                    device=vim.vm.device.VirtualE1000(
+                        backing=vim.vm.device.VirtualEthernetCard.NetworkBackingInfo(
+                            network=network,
+                            deviceName=nic['network'],
+                        ),
+                        connectable=vim.vm.device.VirtualDevice.ConnectInfo(
+                            startConnected=True,
+                        ),
+                    ),
+                ))
+
+            last_unit_number = 0
+            for disk in disks:
+                capacity = disk['capacity'] * 1024 * 1024 # KB
+
+                device_changes.append(vim.vm.device.VirtualDeviceSpec(
+                    fileOperation='create',
+                    operation=vim.vm.device.VirtualDeviceSpec.Operation.add,
+                    device=vim.vm.device.VirtualDisk(
+                        backing=vim.vm.device.VirtualDisk.FlatVer2BackingInfo(
+                            diskMode='persistent',
+                            thinProvisioned=disk.get('thin', True),
+                        ),
+                        capacityInKB=capacity,
+                        controllerKey=0,
+                        unitNumber=last_unit_number,
+                    ),
+                ))
+
+                last_unit_number += 1
+            
+            last_unit_number = 0
+            for cdrom in cdroms:
+                device_changes.append(vim.vm.device.VirtualDeviceSpec(
+                    operation=vim.vm.device.VirtualDeviceSpec.Operation.add,
+                    device=vim.vm.device.VirtualCdrom(
+                        backing=vim.vm.device.VirtualCdrom.IsoBackingInfo(
+                            fileName=cdrom['iso_path'],
+                        ),
+                        controllerKey=1,
+                        unitNumber=last_unit_number,
+                    ),
+                ))
+
+                last_unit_number += 1
+
+            config = vim.vm.ConfigSpec(
+                name=name,
+                memoryMB=memory,
+                numCPUs=cores,
+                numCoresPerSocket=cores_per_socket,
+                files=vim.vm.FileInfo(vmPathName=datastore_path),
+                guestId=guest_type,
+                deviceChange=device_changes,
+            )
+
+            task = vm_folder.CreateVM_Task(config=config, pool=resource_pool)
+            wait_for_tasks(si, [task])
+
+            changed = True
+    elif vm:
+        if vm.runtime.powerState == vim.VirtualMachine.PowerState.poweredOn:
+            task = vm.PowerOffVM_Task()
+            wait_for_tasks(si, [task])
+
+        task = vm.Destroy_Task()
+        wait_for_tasks(si, [task])
+
+        changed = True
+
+    module.exit_json(changed=changed)
+
+from ansible.module_utils.basic import *
+main()

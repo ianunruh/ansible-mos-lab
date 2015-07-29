@@ -1,0 +1,9 @@
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+
+{% for name, network in routed_networks.iteritems() %}
+delete interfaces {{ trunk_interface }} vif {{ network.vif }}
+{% endfor %}
+
+commit
+save

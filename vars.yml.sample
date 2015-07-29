@@ -1,0 +1,30 @@
+env_name: sample
+
+esxi_host: YOUR_ESXI_HOST
+esxi_datastore: YOUR_ESXI_DATASTORE
+
+iso_path: MirantisOpenStack-6.0.iso
+
+ROUTER
+
+routed_networks:
+  pxe:
+    vif: 10
+    address: 10.50.0.33/27
+  public:
+    vif: 11
+    address: 10.50.0.65/27
+
+trunk_interface: ethernet eth1
+
+flat_networks:
+  pxe:
+    vswitch: vSwitch1
+    vif: 10
+
+vsphere_login_host: 10.50.0.2
+vsphere_login_user: administrator@vsphere.local
+vsphere_login_password: YOUR_VSPHERE_PASSWORD
+vsphere_login_insecure: true
+
+fuel_slave_count: 5
