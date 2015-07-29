@@ -1,12 +1,19 @@
+# Short name for the environment
 env_name: sample
 
+# IP address of the ESXI host
 esxi_host: YOUR_ESXI_HOST
+
+# Name of the datastore on the ESXi host (for example: suplab01-datastore1)
 esxi_datastore: YOUR_ESXI_DATASTORE
 
+# Name of the ISO to mount on the Fuel master VM
 iso_path: MirantisOpenStack-6.0.iso
 
+# Hostname of the VyOS router that routed networks should be configured on (for example: suplab01-router)
 router_host: suplab01-router
 
+# Dictionary of routed networks to configure on the VyOS router
 routed_networks:
   pxe:
     vif: 10
@@ -15,16 +22,20 @@ routed_networks:
     vif: 11
     address: 10.50.0.65/27
 
+# Name of the trunk interface that routed networks should be configured on
 trunk_interface: ethernet eth1
 
+# Dictionary of flat networks that should be configured on the ESXi host
 flat_networks:
   pxe:
     vswitch: vSwitch1
     vif: 10
 
+# Login details for the vSphere host
 vsphere_login_host: 10.50.0.2
 vsphere_login_user: administrator@vsphere.local
 vsphere_login_password: YOUR_VSPHERE_PASSWORD
 vsphere_login_insecure: true
 
+# Number of Fuel slave VMs that should be created
 fuel_slave_count: 5
