@@ -1,12 +1,12 @@
-# ansible-openstack-lab
+# ansible-mos-lab
 
-Ansible playbook and modules for deploying OpenStack labs on ESXi and VyOS.
+Ansible playbook and modules for deploying Mirantis OpenStack labs on ESXi and VyOS.
 
 ## Usage
 
 ```bash
-git clone https://github.com/ianunruh/ansible-openstack-lab.git
-cd ansible-openstack-lab
+git clone https://github.com/ianunruh/ansible-mos-lab.git
+cd ansible-mos-lab
 
 # Install Ansible and Python vSphere client
 pip install -r requirements.txt
