@@ -1,5 +1,5 @@
-suplab01-router ansible_ssh_host=172.18.120.148 ansible_ssh_user=vyos
-suplab02-router ansible_ssh_host=172.18.120.149 ansible_ssh_user=vyos
+suplab01-router ansible_ssh_host=172.18.123.150 ansible_ssh_user=vyos
+suplab02-router ansible_ssh_host=172.18.123.151 ansible_ssh_user=vyos
 
 localhost ansible_connection=local
 
