@@ -4,4 +4,4 @@ if [ "$#" -ne 2 ]; then
   exit 1
 fi
 
-ansible-playbook -i hosts -k -e @$1 $2
+ansible-playbook -e @$1 $2
