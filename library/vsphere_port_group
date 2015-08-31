@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 import ssl
+import sys
 
 from pyVmomi import vim, vmodl
 from pyVim import connect
+
+PYTHON_IS_MODERN = sys.version_info >= (2, 7, 9)
 
 def get_obj(content, vimtype, name):
     obj = None
@@ -38,7 +41,7 @@ def main():
     login_password = module.params['login_password']
     login_insecure = module.params['login_insecure']
 
-    if login_insecure:
+    if login_insecure and PYTHON_IS_MODERN:
         ssl._create_default_https_context = ssl._create_unverified_context
 
     si = connect.SmartConnect(host=login_host, user=login_user, pwd=login_password)
