@@ -8,13 +8,10 @@ from pyVim import connect
 PYTHON_IS_MODERN = sys.version_info >= (2, 7, 9)
 
 def get_obj(content, vimtype, name):
-    obj = None
     container = content.viewManager.CreateContainerView(content.rootFolder, vimtype, True)
     for c in container.view:
         if c.name == name:
-            obj = c
-            break
-    return obj
+            return c
 
 def wait_for_tasks(service_instance, tasks):
     property_collector = service_instance.content.propertyCollector
