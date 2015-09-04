@@ -2,10 +2,32 @@
 import ssl
 import sys
 
+
 from pyVmomi import vim, vmodl
 from pyVim import connect
 
 PYTHON_IS_MODERN = sys.version_info >= (2, 7, 9)
+POWER_STATES = {
+    'poweredOn': vim.VirtualMachine.PowerState.poweredOn,
+    'poweredOff': vim.VirtualMachine.PowerState.poweredOff,
+    'suspended': vim.VirtualMachine.PowerState.poweredOff
+    }
+
+CHANGE_POWER_STATE = {
+    'shutdown': POWER_STATES['poweredOff'],
+    'start': POWER_STATES['poweredOn'],
+    'reboot': POWER_STATES['poweredOff'] ,
+    'suspend': POWER_STATES['suspended'],
+    }
+
+VM_TASKS = {
+    'shutdown': 'PowerOffVM_Task',
+    'start': 'PowerOnVM_Task',
+    'reboot': 'ResetVM_Task',
+    'suspend': 'SuspendVM_Task',
+    }
+    
+VALID_ANSIBLE_STATES=['present', 'absent']+CHANGE_POWER_STATE.keys()
 
 def get_obj(content, vimtype, name):
     container = content.viewManager.CreateContainerView(content.rootFolder, vimtype, True)
@@ -72,7 +94,7 @@ def main():
             nics=dict(type='list'),
             cdroms=dict(type='list'),
 
-            state=dict(choices=['present', 'absent'], default='present'),
+            state=dict(choices=VALID_ANSIBLE_STATES, default='present'),
 
             login_host=dict(required=True),
             login_user=dict(required=True),
@@ -204,15 +226,21 @@ def main():
             wait_for_tasks(si, [task])
 
             changed = True
-    elif vm:
-        if vm.runtime.powerState == vim.VirtualMachine.PowerState.poweredOn:
-            task = vm.PowerOffVM_Task()
+    elif state == 'absent':
+        if vm:
+            if vm.runtime.powerState == vim.VirtualMachine.PowerState.poweredOn:
+                task = vm.PowerOffVM_Task()
+                wait_for_tasks(si, [task])
+
+            task = vm.Destroy_Task()
             wait_for_tasks(si, [task])
 
-        task = vm.Destroy_Task()
-        wait_for_tasks(si, [task])
-
-        changed = True
+            changed = True
+    elif state in CHANGE_POWER_STATE.keys():
+        if  vm.runtime.powerState != CHANGE_POWER_STATE[state]:
+            task = getattr(vm, VM_TASKS[state])()
+            wait_for_tasks(si, [task])
+            changed = True
 
     module.exit_json(changed=changed)
 

@@ -1,0 +1,22 @@
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: start fuel master vm
+      vsphere_vm:
+        name: "{{ env_name }}-fuel-master"
+        state: start
+
+        login_host: "{{ vsphere_login_host }}"
+        login_user: "{{ vsphere_login_user }}"
+        login_password: "{{ vsphere_login_password }}"
+        login_insecure: "{{ vsphere_login_insecure }}"
+    - name: start fuel slave vms
+      vsphere_vm:
+        name: "{{ env_name }}-fuel-slave-{{ item }}"
+        state: start
+
+        login_host: "{{ vsphere_login_host }}"
+        login_user: "{{ vsphere_login_user }}"
+        login_password: "{{ vsphere_login_password }}"
+        login_insecure: "{{ vsphere_login_insecure }}"
+      with_sequence: count={{ fuel_slave_count }}
